@@ -1,17 +1,6 @@
 import numpy as np
 
 
-def round(x):
-    """
-    Fixes the completely idiotic way of rounding python uses by default
-    :param x:
-    :type x:
-    :return:
-    :rtype:
-    """
-    return int(x + 0.5)
-
-
 def quadratic_interpolate(alfa: np.ndarray, beta: np.ndarray, gamma: np.ndarray):
     """
     Quadratic interpolation
