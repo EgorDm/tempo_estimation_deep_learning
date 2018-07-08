@@ -29,7 +29,6 @@ def extract_rhythm_odf(x, sr, plot=False):
     f = librosa.fft_frequencies(sr, n_fft)
 
     onset_bands = librosa.onset.onset_strength_multi(S=S, sr=sr, channels=[0, 4, 13, s.shape[0]])
-    print(onset_bands.shape)
 
     for band in onset_bands:
         # Clip to 9th decile
