@@ -56,7 +56,7 @@ def main(name, osu_path, map_filter, sample_count):
         data_path = f'{project_dir}/data/processed/{name}'.replace('\\', '/')
         os.makedirs(data_path, exist_ok=True)
 
-        copyfile(audio_path, f'{data_path}/{make_safe_filename(str(sample))}.mp3')
+        librosa.output.write_wav(f'{data_path}/{make_safe_filename(str(sample))}.wav', x, sr)
         with open(f'{data_path}/{make_safe_filename(str(sample))}.txt', 'w') as f:
             f.writelines([f'{downbeat[0]} {downbeat[1]} {downbeat[2]}\n' for downbeat in downbeats])
 

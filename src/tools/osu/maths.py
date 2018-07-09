@@ -133,8 +133,6 @@ def perfect_curve(ps: List[Coordinate]):
     bSq = np.linalg.norm(a - c) ** 2
     cSq = np.linalg.norm(a - b) ** 2
 
-
-
     if math.isclose(aSq, 0) or math.isclose(bSq, 0) or math.isclose(cSq, 0):
         return [ps[0]]
 
@@ -151,8 +149,6 @@ def perfect_curve(ps: List[Coordinate]):
     dC = c - centre
 
     r = np.linalg.norm(dA)
-
-
 
     thetaStart = math.atan2(dA[1], dA[0])
     thetaEnd = math.atan2(dC[1], dC[0])
@@ -174,14 +170,10 @@ def perfect_curve(ps: List[Coordinate]):
     else:
         amountPoints = max([2, math.ceil(thetaRange / (2 * math.acos(1 - 0.1 / r)))])
 
-
-
     ret = []
     for i in range(amountPoints):
         fract = i / (amountPoints - 1)
-        print(fract)
         theta = thetaStart + dir * fract * thetaRange
-        print(theta)
         o = np.array((math.cos(theta), math.sin(theta))) * r
         ret.append(centre + o)
 
