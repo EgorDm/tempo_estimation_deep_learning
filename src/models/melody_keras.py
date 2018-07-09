@@ -3,6 +3,7 @@ import logging
 from pathlib import Path
 from dotenv import find_dotenv, load_dotenv
 from keras import Sequential
+from keras.callbacks import ModelCheckpoint
 from keras.layers import Conv2D, MaxPool2D, Dropout, Reshape
 
 from src.tools.data.batcher import MelodyBatcher
@@ -40,7 +41,8 @@ def generator_from_batcher(batcher, sample_per_batch=None):
 
 @click.command()
 @click.argument('name', type=click.STRING)  # Dataset name
-def main(name):
+@click.option('--model', default='melody', type=click.STRING)  # Dataset name
+def main(name, model):
     # Create batcher
     dataset_path = f'{project_dir}/data/processed/{name}'.replace('\\', '/')
     train_batcher = MelodyBatcher(f'{dataset_path}/train', buffer_size=10000, batch_count=40)
@@ -59,8 +61,13 @@ def main(name):
     # Create model
     model = build_model()
 
-    model.fit_generator(train_generator(), samples_per_epoch=100, epochs=2, verbose=1, callbacks=[],
-                        validation_data=validation_generator(), validation_steps=10, workers=1)
+    # Checkpoint
+    filepath = f'{project_dir}/models/model/weights_save.hdf5'
+    checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=True)
+    callbacks_list = [checkpoint]
+
+    model.fit_generator(train_generator(), samples_per_epoch=100, epochs=2, verbose=1, callbacks=callbacks_list, validation_data=validation_generator(),
+                        validation_steps=10, workers=1)
 
 
 if __name__ == '__main__':
