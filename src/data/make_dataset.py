@@ -15,7 +15,8 @@ from src.utils.file import make_safe_filename
 @click.argument('osu_path', type=click.Path(exists=True))  # Path to osu installation directory
 @click.option('--map_filter', type=click.STRING, default='ar>=8 ranked=4 mode=0', help='Filter to select the candidate maps')
 @click.option('--sample_count', type=click.INT, default=400, help='Amount of songs that should be in the dataset')
-def main(name, osu_path, map_filter, sample_count):
+@click.option('--validation_size', type=click.FLOAT, default=0.1, help='Percentage of all file that should be used for validation')
+def main(name, osu_path, map_filter, sample_count, validation_size):
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
@@ -29,12 +30,19 @@ def main(name, osu_path, map_filter, sample_count):
     if len(maps) < sample_count: raise Exception('Not enough maps to create a dataset. Consider lowering the sample count.')
 
     contents = []
+    validation_count = min(1, int(sample_count * validation_size))
     while len(contents) < sample_count:
         sample = maps[random.randint(0, len(maps) - 1)]
         if sample.set_id in contents: continue
 
+        sample_type = 'train'
+        if validation_count > 0:
+            sample_type = 'validation'
+            validation_count -= 1
+
         audio_path = f'{osu_path}/Songs/{sample.folder_name}/{sample.audio_file}'
         annotation_path = f'{osu_path}/Songs/{sample.folder_name}/{sample.osu_file}'
+        output_path = f'{project_dir}/data/processed/{name}'.replace('\\', '/')
 
         # Read timings
         ret = osu.models.Beatmap()
@@ -53,11 +61,10 @@ def main(name, osu_path, map_filter, sample_count):
         downbeats = extract_beats(ret.timingpoints, ret.hitobjects, duration)
 
         # Save the data
-        data_path = f'{project_dir}/data/processed/{name}'.replace('\\', '/')
-        os.makedirs(data_path, exist_ok=True)
+        os.makedirs(output_path, exist_ok=True)
 
-        librosa.output.write_wav(f'{data_path}/{make_safe_filename(str(sample))}.wav', x, sr)
-        with open(f'{data_path}/{make_safe_filename(str(sample))}.txt', 'w') as f:
+        librosa.output.write_wav(f'{output_path}/{make_safe_filename(str(sample))}.wav', x, sr)
+        with open(f'{output_path}/{make_safe_filename(str(sample))}.txt', 'w') as f:
             f.writelines([f'{downbeat[0]} {downbeat[1]} {downbeat[2]}\n' for downbeat in downbeats])
 
         print(audio_path)

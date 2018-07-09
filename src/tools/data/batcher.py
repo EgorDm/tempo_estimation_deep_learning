@@ -74,13 +74,16 @@ class Batcher:
             labels.append(l)
 
         self.batches = self.batches[:-count]
-        return np.stack(inputs, axis=0), np.stack(labels, axis=0)
+        return {'x': np.stack(inputs, axis=0)}, np.stack(labels, axis=0)
 
 
 class MelodyBatcher(Batcher):
-    _window_size = 85
-    _cached_features = {}
-    _label_subdivisions = 3  # Oversample the negatves class by a ratio 2:1
+    def __init__(self, datasets, buffer_size=10, validate_size=0.1, batch_count=20) -> None:
+        self._window_size = 85
+        self._cached_features = {}
+        self._label_subdivisions = 3  # Oversample the negatves class by a ratio 2:1
+
+        super().__init__(datasets, buffer_size, validate_size, batch_count)
 
     def _buffer_batches(self):
         # Clean cache
@@ -129,4 +132,6 @@ class MelodyBatcher(Batcher):
         return i, l
 
 
-batcher = MelodyBatcher(['../../../data/processed/default'], buffer_size=10000)
+# batcher = MelodyBatcher(['../../../data/processed/default/train'], buffer_size=10000)
+# for i in range(10):
+#     test = batcher.get_batches()

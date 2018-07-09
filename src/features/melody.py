@@ -15,7 +15,7 @@ def average_bins(q, bins_per_octave=96, cutdown=96):
 
 
 def extract_melody_cqt(x, sr, f_min=195.9977, bins_per_octave=96, octaves=5, hop_length_ms=11.6, plot=False):
-    n_bins = bins_per_octave * octaves
+    n_bins = bins_per_octave * octaves + 16
     hop_length = utils.hop_length_from_ms(hop_length_ms, sr)
 
     q = librosa.cqt(x, sr=sr, fmin=f_min, n_bins=n_bins, bins_per_octave=bins_per_octave, hop_length=hop_length)
@@ -38,6 +38,9 @@ def extract_melody_cqt(x, sr, f_min=195.9977, bins_per_octave=96, octaves=5, hop
 
     return qa, f[bins_per_octave: -bins_per_octave]
 
+
+# import matplotlib.pyplot as plt
 # x, sr = librosa.load('../../data/raw/dream_on.wav')
 # q, f = extract_melody_cqt(x[:int(len(x) / 10)], sr, plot=True)
+# print(q.shape)
 # plt.show()
