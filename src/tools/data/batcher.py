@@ -1,7 +1,6 @@
 import glob
 import os
 import random
-import librosa
 import soundfile as sf
 import src.features as features
 import numpy as np
@@ -74,7 +73,7 @@ class Batcher:
             labels.append(l)
 
         self.batches = self.batches[:-count]
-        return {'x': np.stack(inputs, axis=0)}, np.stack(labels, axis=0)
+        return np.stack(inputs, axis=0), np.stack(labels, axis=0)
 
 
 class MelodyBatcher(Batcher):
@@ -100,15 +99,17 @@ class MelodyBatcher(Batcher):
 
     def _create_batches(self, audio, labels):
         q, _ = features.extract_melody_cqt(audio[0], audio[1])
+        q = np.transpose(q, [1, 0])
+
         cache_idx = random.randint(0, 9999999)  # Lets rely on randomness 🤷
         self._cached_features[cache_idx] = q
-        position_to_frame = q.shape[1] / len(audio[0])
+        position_to_frame = q.shape[0] / len(audio[0])
         half_window = self._window_size / 2
 
         def create_sample(arr, centre, label):
             frame_start = int(centre - half_window)
             frame_end = int(centre + half_window)
-            if frame_start < half_window or frame_end > q.shape[1] - half_window: return
+            if frame_start < half_window or frame_end > q.shape[0] - half_window: return
             arr.append((cache_idx, frame_start, frame_end, label))
 
         # Create positives
@@ -127,7 +128,7 @@ class MelodyBatcher(Batcher):
                 create_sample(self.batches, position_start + step_size * j, 0)
 
     def _post_process(self, batch):
-        i = self._cached_features[batch[0]][:, batch[1]:batch[2]]
+        i = self._cached_features[batch[0]][batch[1]:batch[2], :]
         l = np.array([1, 0]) if batch[3] == 1 else np.array([0, 1])
         return i, l
 
