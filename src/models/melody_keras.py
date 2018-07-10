@@ -1,9 +1,13 @@
+import math
 import click
 from keras import Sequential
 from keras.callbacks import ModelCheckpoint
 from keras.layers import Conv2D, MaxPool2D, Dropout, Reshape
-from src.tools.data.batcher import MelodyBatcher
+from src.tools.data.batcher import AudioFeatureBatcher
 import os
+import src.features as features
+import numpy as np
+import sklearn
 
 
 def build_model():
@@ -32,8 +36,9 @@ def train(dataset_name, save_name, samples_per_epoch=200, validation_steps=10, e
           validation_buffer_size=5000):
     # Create batcher
     dataset_path = f'data/processed/{dataset_name}'.replace('\\', '/')
-    train_batcher = MelodyBatcher(f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
-    validation_batcher = MelodyBatcher(f'{dataset_path}/validation', buffer_size=validation_buffer_size, batch_size=validation_batch_size)
+    train_batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
+    validation_batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=f'{dataset_path}/validation', buffer_size=validation_buffer_size,
+                                             batch_size=validation_batch_size)
 
     # Create model
     model = build_model()
@@ -52,3 +57,35 @@ def train(dataset_name, save_name, samples_per_epoch=200, validation_steps=10, e
                         validation_data=validation_batcher.generator(),
                         validation_steps=validation_steps,
                         workers=1)
+
+
+def evaluate(sample_path, save_name, batch_size=80):
+    save_path = f'models/{save_name}/weights_save.hdf5'
+    if not os.path.exists(save_path): raise Exception(f'Given save file does not exist {save_path}')
+
+    batcher = AudioFeatureBatcher(features.extract_melody_cqt, sample_files=[sample_path], sampling_mode='stratisfied', randomize=False, batch_size=batch_size)
+    step_count = int(math.ceil(len(batcher.samples) / batcher.batch_size))
+
+    # Create model
+    model = build_model()
+    # Load weights
+    model.load_weights(save_path)
+
+    total_predictions = []
+    total_labels = []
+    for i in range(step_count):
+        x, y = batcher.get_batch()
+        print(f'{i}/{step_count}: Evaluating part ')
+        predictions = np.argmax(model.predict(x, batch_size=batcher.batch_size, verbose=0), axis=1)
+        labels = np.argmax(y, axis=1)
+        accuracy = sklearn.metrics.accuracy_score(labels, predictions)
+        print(f'{i}/{step_count}: Accuracy: {accuracy}')
+
+        total_predictions += predictions.tolist()
+        total_labels += labels.tolist()
+
+    accuracy = sklearn.metrics.accuracy_score(total_labels, total_predictions)
+    print(f'Finished evaluating. Average metrics: Accuracy {accuracy}')
+
+
+
