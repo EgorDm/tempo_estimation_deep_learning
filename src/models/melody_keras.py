@@ -5,6 +5,7 @@ from keras.layers import Conv2D, MaxPool2D, Dropout, Reshape
 from src.tools.data.batcher import MelodyBatcher
 import os
 
+
 def build_model():
     model = Sequential()
     model.add(Reshape([85, 304, 1], input_shape=[85, 304]))
@@ -27,41 +28,27 @@ def build_model():
     return model
 
 
-def generator_from_batcher(batcher, sample_per_batch=None):
-    def generator():
-        while 1:
-            x, y = batcher.get_batches(sample_per_batch)
-            yield x['x'], y
-    return generator
-
-
-@click.command()
-@click.argument('name', type=click.STRING)  # Dataset name
-@click.option('--model_name', default='melody', type=click.STRING)  # Dataset name
-def main(name, model_name):
+def train(dataset_name, save_name, samples_per_epoch=200, validation_steps=10, epochs=5, batch_size=80, buffer_size=60000, validation_batch_size=80,
+          validation_buffer_size=5000):
     # Create batcher
-    dataset_path = f'data/processed/{name}'.replace('\\', '/')
-    train_batcher = MelodyBatcher(f'{dataset_path}/train', buffer_size=60000, batch_count=80)
-    validation_batcher = MelodyBatcher(f'{dataset_path}/validation', buffer_size=600)
-
-    def train_generator():
-        while 1:
-            x, y = train_batcher.get_batches()
-            yield x, y
-
-    def validation_generator():
-        while 1:
-            x, y = validation_batcher.get_batches()
-            yield x, y
+    dataset_path = f'data/processed/{dataset_name}'.replace('\\', '/')
+    train_batcher = MelodyBatcher(f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
+    validation_batcher = MelodyBatcher(f'{dataset_path}/validation', buffer_size=validation_buffer_size, batch_size=validation_batch_size)
 
     # Create model
     model = build_model()
 
     # Checkpoint
-    filepath = f'models/{model_name}/weights_save.hdf5'
-    os.makedirs(f'models/{model_name}', exist_ok=True)
+    filepath = f'models/{save_name}/weights_save.hdf5'
+    os.makedirs(f'models/{save_name}', exist_ok=True)
     checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=True)
     callbacks_list = [checkpoint]
 
-    model.fit_generator(train_generator(), samples_per_epoch=200, epochs=5, verbose=1, callbacks=callbacks_list, validation_data=validation_generator(),
-                        validation_steps=10, workers=1)
+    if os.path.exists(filepath): model.load_weights(filepath)
+
+    model.fit_generator(train_batcher.generator(),
+                        samples_per_epoch=samples_per_epoch,
+                        epochs=epochs, verbose=1, callbacks=callbacks_list,
+                        validation_data=validation_batcher.generator(),
+                        validation_steps=validation_steps,
+                        workers=1)

@@ -7,35 +7,39 @@ import numpy as np
 
 
 class Batcher:
-    def __init__(self, datasets, buffer_size=10, validate_size=0.1, batch_count=20) -> None:
-        self.buffer_size = max(buffer_size, batch_count * 2)
+    def __init__(self, datasets, buffer_size=10, batch_size=20, randomize_batches=True):
+        self.buffer_size = max(buffer_size, batch_size * 2)
         self.batches = []
         self.cursor = 0
         self.epoch = 0
-        self.batch_count = batch_count
+        self.batch_size = batch_size
+        self.randomize_batches = randomize_batches
 
         # Load the dataset entries
         if isinstance(datasets, str): datasets = [datasets]
 
         data_files = []
-        for dataset in datasets:
-            if not os.path.exists(dataset): raise Exception(f'Dataset not found {dataset}')
-            dataset = dataset.replace('\\', '/')
-
-            files = glob.glob(f'{dataset}/*.wav')
-            data_files += ['.'.join(file.replace('\\', '/').split('.')[:-1]) for file in files]
-
+        for dataset in datasets: data_files += self._load_dataset_entries(dataset)
         if len(data_files) == 0: raise Exception(f'Not enough data in given datasets.')
 
-        # Split the data in training and validation
         random.shuffle(data_files)
-        validate_split = max(int(len(data_files) * validate_size), 1)
-        self.train_data_files = data_files[validate_split:]
-        self.validate_data_files = data_files[:validate_split]
+        self.train_data_files = data_files
 
         self._buffer_batches()
 
+    def _load_dataset_entries(self, dataset):
+        if not os.path.exists(dataset): raise Exception(f'Dataset not found {dataset}')
+        dataset = dataset.replace('\\', '/')
+
+        files = glob.glob(f'{dataset}/*.wav')
+        return ['.'.join(file.replace('\\', '/').split('.')[:-1]) for file in files]
+
     def _buffer_batches(self):
+        """
+        Loads new batches into the batch buffer
+        :return:
+        :rtype:
+        """
         tmp = self.batches
         self.batches = []
 
@@ -48,22 +52,38 @@ class Batcher:
             sample = self.train_data_files[self.cursor]
             x, sr = sf.read(f'{sample}.wav')
             with open(f'{sample}.txt', 'r') as f: labels = f.readlines()
-            self._create_batches((x, sr), labels)
-        random.shuffle(self.batches)
+            self._create_batches({'data': x, 'sr': sr}, labels)
+
+        if self.randomize_batches: random.shuffle(self.batches)
 
         # We push the leftovers to front since they had their share of suffling and we want to empty cache asap
         self.batches += tmp
 
     def _create_batches(self, audio, labels):
-        self.batches += [i for i in range(10)]
+        """
+        Create batches from a dataset sample
+        :param audio:
+        :type audio: dict
+        :param labels:
+        :type labels:
+        :return:
+        :rtype:
+        """
+        pass
 
     def _post_process(self, batch):
+        """
+        Post process the batch before returning it to the model
+        :param batch:
+        :type batch:
+        :return:
+        :rtype:
+        """
         return batch
 
     def get_batches(self, count=None):
-        if count is None: count = self.batch_count
-        if len(self.batches) < count:
-            self._buffer_batches()
+        if count is None: count = self.batch_size
+        if len(self.batches) < count: self._buffer_batches()  # Buffer batches if there are not enough
 
         inputs = []
         labels = []
@@ -75,35 +95,39 @@ class Batcher:
         self.batches = self.batches[:-count]
         return np.stack(inputs, axis=0), np.stack(labels, axis=0)
 
+    def generator(self):
+        while 1:
+            x, y = self.get_batches()
+            yield x, y
+
 
 class MelodyBatcher(Batcher):
-    def __init__(self, datasets, buffer_size=10, validate_size=0.1, batch_count=20) -> None:
+    def __init__(self, datasets, buffer_size=10, batch_size=20, randomize_batches=True) -> None:
         self._window_size = 85
         self._cached_features = {}
         self._label_subdivisions = 3  # Oversample the negatves class by a ratio 2:1
 
-        super().__init__(datasets, buffer_size, validate_size, batch_count)
+        super().__init__(datasets, buffer_size, batch_size, randomize_batches)
 
     def _buffer_batches(self):
         # Clean cache
         remove_cached = list(self._cached_features.keys())
-        for i in range(len(self.batches)):
+        for batch in self.batches:
             if len(remove_cached) == 0: break
-            if self.batches[i][0] in remove_cached: remove_cached.remove(self.batches[i][0])
+            if batch[0] in remove_cached: remove_cached.remove(batch[0])
 
-        for k in remove_cached:
-            self._cached_features.pop(k)
+        for k in remove_cached: self._cached_features.pop(k)
 
         # Default behaviour
         super()._buffer_batches()
 
     def _create_batches(self, audio, labels):
-        q, _ = features.extract_melody_cqt(audio[0], audio[1])
-        q = np.transpose(q, [1, 0])
+        q, _ = features.extract_melody_cqt(audio['data'], audio['sr'])
+        q = np.transpose(q, [1, 0])  # Swap the temporal and bin axes. [temporal, bins]
 
-        cache_idx = random.randint(0, 9999999)  # Lets rely on randomness 🤷
+        cache_idx = random.randint(0, 9999999)  # Lets rely on randomness 🤷 to pock a unique cache spot
         self._cached_features[cache_idx] = q
-        position_to_frame = q.shape[0] / len(audio[0])
+        position_to_frame = q.shape[0] / len(audio['data'])
         half_window = self._window_size / 2
 
         def create_sample(arr, centre, label):
@@ -112,15 +136,17 @@ class MelodyBatcher(Batcher):
             if frame_start < half_window or frame_end > q.shape[0] - half_window: return
             arr.append((cache_idx, frame_start, frame_end, label))
 
+        labels = [float(label.split(' ')[0]) for label in labels]  # TODO: here we can add some constraints
+
         # Create positives
         for label in labels:
-            position = int(float(label.split(' ')[0]) * audio[1] * position_to_frame)
+            position = int(label * audio['sr'] * position_to_frame)
             create_sample(self.batches, position, 1)
 
-        # Create negatives
+        # Create negatives (just pick some pos i between)
         for i in range(len(labels) - 1):
-            position_start = int(float(labels[i].split(' ')[0]) * audio[1] * position_to_frame)
-            position_end = int(float(labels[i + 1].split(' ')[0]) * audio[1] * position_to_frame)
+            position_start = int(labels[i] * audio['sr'] * position_to_frame)
+            position_end = int(labels[i + 1] * audio['sr'] * position_to_frame)
             if (position_end - position_start) <= self._label_subdivisions: continue
 
             step_size = (position_end - position_start) / self._label_subdivisions
@@ -131,7 +157,6 @@ class MelodyBatcher(Batcher):
         i = self._cached_features[batch[0]][batch[1]:batch[2], :]
         l = np.array([1, 0]) if batch[3] == 1 else np.array([0, 1])
         return i, l
-
 
 # batcher = MelodyBatcher(['../../../data/processed/default/train'], buffer_size=10000)
 # for i in range(10):
