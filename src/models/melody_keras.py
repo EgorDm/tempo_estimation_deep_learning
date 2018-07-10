@@ -1,13 +1,9 @@
 import click
-import logging
-from pathlib import Path
-from dotenv import find_dotenv, load_dotenv
 from keras import Sequential
 from keras.callbacks import ModelCheckpoint
 from keras.layers import Conv2D, MaxPool2D, Dropout, Reshape
-
 from src.tools.data.batcher import MelodyBatcher
-
+import os
 
 def build_model():
     model = Sequential()
@@ -25,7 +21,7 @@ def build_model():
     model.add(Conv2D(2, kernel_size=(1, 1), strides=(1, 1), activation='softmax'))
     model.add(Reshape([2]))
 
-    model.compile(loss='binary_crossentropy', optimizer='adam')
+    model.compile(loss='binary_crossentropy', optimizer='adam', metrics=['acc'])
     model.summary()
 
     return model
@@ -41,12 +37,12 @@ def generator_from_batcher(batcher, sample_per_batch=None):
 
 @click.command()
 @click.argument('name', type=click.STRING)  # Dataset name
-@click.option('--model', default='melody', type=click.STRING)  # Dataset name
-def main(name, model):
+@click.option('--model_name', default='melody', type=click.STRING)  # Dataset name
+def main(name, model_name):
     # Create batcher
-    dataset_path = f'{project_dir}/data/processed/{name}'.replace('\\', '/')
-    train_batcher = MelodyBatcher(f'{dataset_path}/train', buffer_size=10000, batch_count=40)
-    validation_batcher = MelodyBatcher(f'{dataset_path}/validation', buffer_size=500)
+    dataset_path = f'data/processed/{name}'.replace('\\', '/')
+    train_batcher = MelodyBatcher(f'{dataset_path}/train', buffer_size=60000, batch_count=80)
+    validation_batcher = MelodyBatcher(f'{dataset_path}/validation', buffer_size=600)
 
     def train_generator():
         while 1:
@@ -62,23 +58,10 @@ def main(name, model):
     model = build_model()
 
     # Checkpoint
-    filepath = f'{project_dir}/models/model/weights_save.hdf5'
+    filepath = f'models/{model_name}/weights_save.hdf5'
+    os.makedirs(f'models/{model_name}', exist_ok=True)
     checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=True)
     callbacks_list = [checkpoint]
 
-    model.fit_generator(train_generator(), samples_per_epoch=100, epochs=2, verbose=1, callbacks=callbacks_list, validation_data=validation_generator(),
+    model.fit_generator(train_generator(), samples_per_epoch=200, epochs=5, verbose=1, callbacks=callbacks_list, validation_data=validation_generator(),
                         validation_steps=10, workers=1)
-
-
-if __name__ == '__main__':
-    log_fmt = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    logging.basicConfig(level=logging.INFO, format=log_fmt)
-
-    # not used in this stub but often useful for finding various files
-    project_dir = Path(__file__).resolve().parents[2]
-
-    # find .env automagically by walking up directories until it's found, then
-    # load up the .env entries as environment variables
-    load_dotenv(find_dotenv())
-
-    main()
