@@ -14,7 +14,7 @@ from src.utils.file import make_safe_filename
 @click.argument('name', type=click.STRING)  # Dataset name
 @click.argument('osu_path', type=click.Path(exists=True))  # Path to osu installation directory
 @click.option('--map_filter', type=click.STRING, default='ar>=8 ranked=4 mode=0', help='Filter to select the candidate maps')
-@click.option('--sample_count', type=click.INT, default=400, help='Amount of songs that should be in the dataset')
+@click.option('--sample_count', type=click.INT, default=500, help='Amount of songs that should be in the dataset')
 @click.option('--validation_size', type=click.FLOAT, default=0.1, help='Percentage of all file that should be used for validation')
 def main(name, osu_path, map_filter, sample_count, validation_size):
     """ Runs data processing scripts to turn raw data from (../raw) into
@@ -36,13 +36,13 @@ def main(name, osu_path, map_filter, sample_count, validation_size):
         if sample.set_id in contents: continue
 
         sample_type = 'train'
-        if validation_count > 0:
+        if validation_count > 0 and random.randint(1, 100) <= 100 * validation_size:
             sample_type = 'validation'
             validation_count -= 1
 
         audio_path = f'{osu_path}/Songs/{sample.folder_name}/{sample.audio_file}'
         annotation_path = f'{osu_path}/Songs/{sample.folder_name}/{sample.osu_file}'
-        output_path = f'{project_dir}/data/processed/{name}'.replace('\\', '/')
+        output_path = f'{project_dir}/data/processed/{name}/{sample_type}'.replace('\\', '/')
 
         # Read timings
         ret = osu.models.Beatmap()
@@ -64,7 +64,12 @@ def main(name, osu_path, map_filter, sample_count, validation_size):
         os.makedirs(output_path, exist_ok=True)
 
         librosa.output.write_wav(f'{output_path}/{make_safe_filename(str(sample))}.wav', x, sr)
+
+        timing_changes = [f'{timing.offset/1000} {timing.mpb} {timing.meter}\n' for timing in ret.timingpoints if isinstance(timing, osu.models.KeyTimingPoint)]
         with open(f'{output_path}/{make_safe_filename(str(sample))}.txt', 'w') as f:
+            f.write(f'{len(timing_changes)}\n')
+            f.writelines(timing_changes)
+            f.write(f'{len(downbeats)}\n')
             f.writelines([f'{downbeat[0]} {downbeat[1]} {downbeat[2]}\n' for downbeat in downbeats])
 
         print(audio_path)
