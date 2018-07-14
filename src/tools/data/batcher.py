@@ -89,9 +89,9 @@ class Batcher:
 
     def generator(self):
         while 1:
-            x, y = self.get_batch()
-            if self.sample_count() == 0: break
-            yield x, y
+            batch = self.get_batch()
+            if batch is None: break
+            yield batch
 
     def sample_count(self):
         return len(self.samples)
