@@ -12,11 +12,11 @@ from tqdm import tqdm
 
 
 @click.command()
-@click.argument('name', type=click.STRING)  # Dataset name
+@click.argument('dataset_name', type=click.STRING)
 @click.option('--map_filter', type=click.STRING, default='ar>=8 ranked=4 mode=0', help='Filter to select the candidate maps')
 @click.option('--sample_count', type=click.INT, default=1500, help='Amount of songs that should be in the dataset')
 @click.option('--validation_size', type=click.FLOAT, default=0.1, help='Percentage of all file that should be used for validation')
-def main(name, map_filter, sample_count, validation_size):
+def main(dataset_name, map_filter, sample_count, validation_size):
     """ Runs data processing scripts to turn raw data from (../raw) into
         cleaned data ready to be analyzed (saved in ../processed).
     """
@@ -24,13 +24,12 @@ def main(name, map_filter, sample_count, validation_size):
     logger.info('making final data set from raw data')
 
     osu_path = os.environ["OSU_PATH"].replace('\\', '/')
-
     db = osu.OsuDB(f'{osu_path}/osu!.db')
     maps = db.filter(map_filter)
     if len(maps) < sample_count: raise Exception('Not enough maps to create a dataset. Consider lowering the sample count.')
 
     validation_count = min(1, int(sample_count * validation_size))
-    validation_samples = (random.randint(0, len(maps) - 1) for _ in range(validation_count))
+    validation_samples = [random.randint(0, len(maps) - 1) for _ in range(validation_count)]
 
     contents = []
     progress = tqdm(total=sample_count)
@@ -43,7 +42,7 @@ def main(name, map_filter, sample_count, validation_size):
 
         audio_path = f'{osu_path}/Songs/{sample.folder_name}/{sample.audio_file}'
         annotation_path = f'{osu_path}/Songs/{sample.folder_name}/{sample.osu_file}'
-        output_path = f'{project_dir}/data/raw/{name}/{sample_type}'.replace('\\', '/')
+        output_path = f'{project_dir}/data/raw/{dataset_name}/{sample_type}'.replace('\\', '/')
 
         # Read timings
         ret = osu.models.Beatmap()
@@ -77,7 +76,7 @@ def main(name, map_filter, sample_count, validation_size):
         contents.append(sample.set_id)
 
     progress.close()
-    print(f'{name} and {osu_path}')
+    print(f'{dataset_name} and {osu_path}')
 
 
 def extract_beats(timings, hitobjects, duration):
