@@ -3,11 +3,12 @@ import click
 from keras import Sequential
 from keras.callbacks import ModelCheckpoint
 from keras.layers import Conv2D, MaxPool2D, Dropout, Reshape
-from src.tools.data.batcher import AudioFeatureBatcher
 import os
 import src.features as features
 import numpy as np
 import sklearn
+from src.tools.data.audio_batcher import AudioFeatureBatcher
+from src.tools.data.precomputed_batcher import PrecomputedBatcher
 
 
 def build_model():
@@ -32,13 +33,19 @@ def build_model():
     return model
 
 
-def train(dataset_name, save_name, samples_per_epoch=200, validation_steps=10, epochs=5, batch_size=80, buffer_size=60000, validation_batch_size=80,
+def train(dataset_name, save_name, processed, samples_per_epoch=200, validation_steps=10, epochs=5, batch_size=80, buffer_size=60000, validation_batch_size=80,
           validation_buffer_size=5000):
     # Create batcher
-    dataset_path = f'data/processed/{dataset_name}'.replace('\\', '/')
-    train_batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
-    validation_batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=f'{dataset_path}/validation', buffer_size=validation_buffer_size,
-                                             batch_size=validation_batch_size)
+    if processed:
+        dataset_path = f'data/processed/{dataset_name}'.replace('\\', '/')
+        train_batcher = PrecomputedBatcher('melody', datasets=f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
+        validation_batcher = PrecomputedBatcher('melody', datasets=f'{dataset_path}/validation', buffer_size=validation_buffer_size,
+                                                batch_size=validation_batch_size)
+    else:
+        dataset_path = f'data/raw/{dataset_name}'.replace('\\', '/')
+        train_batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
+        validation_batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=f'{dataset_path}/validation', buffer_size=validation_buffer_size,
+                                                 batch_size=validation_batch_size)
 
     # Create model
     model = build_model()
@@ -86,6 +93,3 @@ def evaluate(sample_path, save_name, batch_size=80):
 
     accuracy = sklearn.metrics.accuracy_score(total_labels, total_predictions)
     print(f'Finished evaluating. Average metrics: Accuracy {accuracy}')
-
-
-

@@ -1,8 +1,9 @@
 import glob
 import os
 import random
-from typing import Tuple
+from typing import Tuple, Union, Optional
 import numpy as np
+from tqdm import tqdm
 
 
 class Batcher:
@@ -42,7 +43,8 @@ class Batcher:
         tmp = self.samples
         self.samples = []
 
-        while len(self.samples) < self.buffer_size:
+        progress = tqdm(total=self.buffer_size, desc='Filling buffer')
+        while self.sample_count() < self.buffer_size:
             self.cursor += 1
             if self.cursor >= len(self.train_data_files):
                 if not self.repeat_dataset: return
@@ -52,6 +54,9 @@ class Batcher:
             entry = self.train_data_files[self.cursor]
             self._create_samples_from_entry(entry)
 
+            progress.update(self.sample_count() - progress.n)
+        progress.close()
+
         if self.randomize: random.shuffle(self.samples)
 
         # We push the leftovers to front since they had their share of suffling and we want to empty cache asap
@@ -59,16 +64,18 @@ class Batcher:
 
     def _create_samples_from_entry(self, entry): pass
 
-    def _post_process_sample(self, sample) -> Tuple[np.ndarray, np.ndarray]:
+    def _post_process_sample(self, sample) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         """
         Post process the batch before returning it to the model
         """
         return sample
 
-    def get_batch(self, count=None) -> Tuple[np.ndarray, np.ndarray]:
+    def get_batch(self, count=None) -> Optional[Tuple[np.ndarray, np.ndarray]]:
         if count is None: count = self.batch_size
-        if len(self.samples) < count: self._buffer_batches()  # Buffer batches if there are not enough
-        count = min(len(self.samples), count)
+        if self.sample_count() < count: self._buffer_batches()  # Buffer batches if there are not enough
+
+        count = min(self.sample_count(), count)
+        if count == 0: return None
 
         inputs = []
         labels = []
@@ -77,14 +84,17 @@ class Batcher:
             inputs.append(i)
             labels.append(l)
 
-        self.samples = self.samples[:-count]
+        del self.samples[-count:]
         return np.stack(inputs, axis=0), np.stack(labels, axis=0)
 
     def generator(self):
         while 1:
             x, y = self.get_batch()
-            if len(self.samples) == 0: break
+            if self.sample_count() == 0: break
             yield x, y
+
+    def sample_count(self):
+        return len(self.samples)
 
 
 class CacheableBatcher(Batcher):
@@ -92,10 +102,10 @@ class CacheableBatcher(Batcher):
     Requires every batch to specify the cache position as the first element
     """
 
-    def __init__(self, datasets=None, sample_files=None, buffer_size=10, batch_size=20, randomize=True):
+    def __init__(self, datasets=None, sample_files=None, buffer_size=10, batch_size=20, randomize=True, repeat_dataset=True):
         self._cached_features = {}
 
-        super().__init__(datasets, sample_files, buffer_size, batch_size, randomize)
+        super().__init__(datasets, sample_files, buffer_size, batch_size, randomize, repeat_dataset)
 
     def _buffer_batches(self):
         # Clean cache

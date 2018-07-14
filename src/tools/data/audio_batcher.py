@@ -1,17 +1,18 @@
 import soundfile as sf
 import numpy as np
 from src.tools.data.batcher import CacheableBatcher
+import src.features as features
 from src.utils.iteration import Iterator
-import random
+import random, sys
 
 
 class AudioFeatureBatcher(CacheableBatcher):
-    def __init__(self, feature, sampling_mode='stratisfied', datasets=None, sample_files=None, buffer_size=10, batch_size=20, randomize=True):
+    def __init__(self, feature, sampling_mode='random', datasets=None, sample_files=None, buffer_size=10, batch_size=20, randomize=True, repeat_dataset=True):
         self._window_size = 85
         self._sampling_mode = sampling_mode.lower()
         self._feature = feature
 
-        super().__init__(datasets, sample_files, buffer_size, batch_size, randomize)
+        super().__init__(datasets, sample_files, buffer_size, batch_size, randomize, repeat_dataset)
 
     # noinspection PyUnresolvedReferences
     def _create_samples_from_entry(self, entry):
@@ -31,11 +32,11 @@ class AudioFeatureBatcher(CacheableBatcher):
         duration = len(x) / sr
 
         # Create samples
-        def create_sample(centre, label):
+        def create_sample(arr, centre, label):
             frame_start = int(centre - half_window)
             frame_end = int(centre + half_window)
             if frame_start < half_window or frame_end > q.shape[0] - half_window: return
-            self.samples.append((cache_key, frame_start, frame_end, label))
+            arr.append((cache_key, frame_start, frame_end, label))
 
         # Full mode creates samples for every position in audio. Dont use it for training since labels are dispropotionate
         if self._sampling_mode == 'full':
@@ -54,8 +55,9 @@ class AudioFeatureBatcher(CacheableBatcher):
                 mid_tatum = timing_it.time - timing_it.half_tatum_length + random.uniform(-0.5, 0.5) * timing_it.half_tatum_length
                 position = mid_tatum * sr * position_to_frame
 
-                create_sample(position, 1 if current_beat is not None else 0)
+                create_sample(self.samples, position, 1 if current_beat is not None else 0)
                 timing_it.time += timing_it.half_tatum_length * 2
+
         # Randomize the samples.
         elif self._sampling_mode == 'random':
             def next_tempo(it, tempo): it.half_tatum_length = tempo[1] * tempo[2] / 1000 / tatum_size / 2
@@ -71,13 +73,13 @@ class AudioFeatureBatcher(CacheableBatcher):
                 mid_tatum = beat_it.time + random.uniform(-0.5, 0.5) * timing_it.half_tatum_length
                 position = mid_tatum * sr * position_to_frame
 
-                create_sample(position, 1)
+                create_sample(self.samples, position, 1)
 
                 # Pick a random negative between the two labeled tantums
                 if beat_it.peek() is not None:
                     position_start = int((beat_it.current()[0] + timing_it.half_tatum_length * 2) * sr * position_to_frame)
                     position_end = int((beat_it.peek()[0] - timing_it.half_tatum_length * 2) * sr * position_to_frame)
-                    create_sample(position_start + random.uniform(0, 1) * (position_end - position_start), 0)
+                    create_sample(self.samples, position_start + random.uniform(0, 1) * (position_end - position_start), 0)
 
     def _get_sample_data(self, sample) -> np.ndarray:
         return self._cached_features[sample[0]][sample[1]:sample[2], :]
@@ -104,5 +106,7 @@ class AudioFeatureBatcher(CacheableBatcher):
 
         return tempo_changes, beats
 
-# batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=['../../../data/processed/default/train'], sampling_mode='random', buffer_size=1000)
-# test = batcher.get_batch()
+
+# batcher = AudioFeatureBatcher(features.extract_melody_cqt, datasets=['../../../data/processed/default/train'], sampling_mode='random', buffer_size=1)
+# test = batcher.get_batch(len(batcher.samples))
+# print(sys.getsizeof(test))
