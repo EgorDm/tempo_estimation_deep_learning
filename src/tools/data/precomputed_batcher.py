@@ -53,6 +53,4 @@ class PrecomputedBatcher(Batcher):
 
         return inputs, labels
 
-#
 # batcher = PrecomputedBatcher('melody', '../../../data/processed/default/train')
-# test = batcher.get_batch(6000)

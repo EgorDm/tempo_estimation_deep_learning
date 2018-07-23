@@ -36,6 +36,7 @@ def build_model():
 def train(dataset_name, save_name, processed, samples_per_epoch=200, validation_steps=10, epochs=5, batch_size=80, buffer_size=60000, validation_batch_size=80,
           validation_buffer_size=5000):
     # Create batcher
+    print('Creating a batcher')
     if processed:
         dataset_path = f'data/processed/{dataset_name}'.replace('\\', '/')
         train_batcher = PrecomputedBatcher('melody', datasets=f'{dataset_path}/train', buffer_size=buffer_size, batch_size=batch_size)
@@ -48,6 +49,7 @@ def train(dataset_name, save_name, processed, samples_per_epoch=200, validation_
                                                  batch_size=validation_batch_size)
 
     # Create model
+    print('Building the model')
     model = build_model()
 
     # Checkpoint
@@ -56,8 +58,12 @@ def train(dataset_name, save_name, processed, samples_per_epoch=200, validation_
     checkpoint = ModelCheckpoint(filepath, verbose=1, save_best_only=True)
     callbacks_list = [checkpoint]
 
-    if os.path.exists(filepath): model.load_weights(filepath)
+    # Load weights
+    if os.path.exists(filepath):
+        print('Loading existing save')
+        model.load_weights(filepath)
 
+    print('Starting training')
     model.fit_generator(train_batcher.generator(),
                         samples_per_epoch=samples_per_epoch,
                         epochs=epochs, verbose=1, callbacks=callbacks_list,

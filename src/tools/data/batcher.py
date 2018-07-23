@@ -4,7 +4,7 @@ import random
 from typing import Tuple, Union, Optional
 import numpy as np
 from tqdm import tqdm
-
+import gc
 
 class Batcher:
     def __init__(self, datasets=None, sample_files=None, buffer_size=10, batch_size=20, randomize=True, repeat_dataset=True):
@@ -61,6 +61,8 @@ class Batcher:
 
         # We push the leftovers to front since they had their share of suffling and we want to empty cache asap
         self.samples += tmp
+
+        gc.collect()
 
     def _create_samples_from_entry(self, entry): pass
 

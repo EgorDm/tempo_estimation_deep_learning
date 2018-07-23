@@ -9,7 +9,7 @@ import click
 @click.argument('dataset_name', type=click.STRING)
 @click.argument('save_name', type=click.STRING)
 @click.option('--processed', default=True, type=click.BOOL, help='Wether the dataset already is processed or not')
-@click.option('--epochs', default=5, type=click.INT, help='Amount of epochs should be trained on')
+@click.option('--epochs', default=20, type=click.INT, help='Amount of epochs should be trained on')
 @click.option('--samples_per_epoch', default=200, type=click.INT, help='Samples per epoch you want trained on')
 @click.option('--batch_size', default=80, type=click.INT, help='Size of the batch that is trained on. Not too big or too small.')
 @click.option('--buffer_size', default=3000, type=click.INT, help='Amount of batches that should be preloaded')
